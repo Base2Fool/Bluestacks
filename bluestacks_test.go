@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/go-vgo/robotgo"
 	"github.com/google/go-cmp/cmp"
 	"image/color"
 	"io"
@@ -50,30 +49,6 @@ func TestStdoutError(t *testing.T) {
 		t.Errorf("want an empty string but got %s", buf.String())
 	}
 
-}
-
-// Gets the three out of four colors of the playstore app icon when it's the first app on bluestacks
-func TestHexWithHexMaxSetAtThree(t *testing.T) {
-	go bluestacks.RunStacks()
-	robotgo.Sleep(15)
-	// Coordinates for a screen size of 1920 x 1080
-	bluestacks.MaxWindow(1836, 124)
-	robotgo.Sleep(1)
-	pxc := bluestacks.PxColorPipe{
-		HexMax: 3,
-		McCoords: []bluestacks.MouseCursorCoords{
-			{X: 244, Y: 182}, {X: 258, Y: 193}, {X: 240, Y: 206}},
-	}
-	pxc.Hex()
-	want := "#34a853 #34a853 #34a853 #fabc05 #fabc05 #fabc05 #e94334 #e94334 #e94334 "
-	r := io.MultiReader(&pxc.BufOne, &pxc.BufTwo, &pxc.BufThree)
-	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cmp.Equal(want, string(got)) {
-		t.Error(cmp.Diff(want, string(got)))
-	}
 }
 
 func TestHexNoOpsWithInvalidHexMax(t *testing.T) {
@@ -169,105 +144,6 @@ func TestHexToRGBANoOpsWhenPxErrIsNonNil(t *testing.T) {
 	}
 }
 
-func TestAverage(t *testing.T) {
-	t.Parallel()
-	pxc := bluestacks.PxColorPipe{
-		Colors: bluestacks.Colors{
-			RGBAs: [][]color.RGBA{
-				{{52, 168, 83, 255}, {250, 188, 5, 255}, {233, 67, 52, 255}},
-				{{133, 23, 56, 255}, {212, 121, 32, 255}, {200, 72, 47, 255}},
-				{{100, 168, 23, 255}, {255, 112, 13, 255}, {222, 27, 9, 255}},
-			},
-		},
-	}
-	pxc.Average(false)
-	want := "b28d2f b6482d c0660f"
-	got, err := io.ReadAll(pxc.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want != string(got) {
-		t.Errorf("want %q, but got %q", want, got)
-	}
-}
-
-func TestAverageNoOpsWhenPxErrIsNonNil(t *testing.T) {
-	t.Parallel()
-	pxc := bluestacks.PxColorPipe{
-		Err: errors.New("some non-nil error"),
-		Colors: bluestacks.Colors{
-			RGBAs: [][]color.RGBA{
-				{{52, 168, 83, 255}, {250, 188, 5, 255}, {233, 67, 52, 255}},
-				{{133, 23, 56, 255}, {212, 121, 32, 255}, {200, 72, 47, 255}},
-				{{100, 168, 23, 255}, {255, 112, 13, 255}, {222, 27, 9, 255}},
-			},
-		},
-	}
-	pxc.Average(false)
-	data, err := io.ReadAll(pxc.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(data) > 0 {
-		t.Errorf("want data to have no output when pipe has"+
-			" an non-nil error when it reaches average filter, but got %s", data)
-	}
-
-}
-
-func TestAverageInColorRGBA(t *testing.T) {
-	// Why does this fail with t.Parallel() ?
-	//t.Parallel()
-	pxc := bluestacks.PxColorPipe{
-		Colors: bluestacks.Colors{
-			RGBAs: [][]color.RGBA{
-				{{255, 255, 255, 255}, {255, 255, 255, 255}},
-				{{255, 255, 255, 255}, {255, 255, 255, 255}},
-				{{255, 255, 255, 255}, {255, 255, 255, 255}},
-			},
-		},
-	}
-
-	pxc.Average(false)
-	want := bluestacks.ColorsAverage{
-		FirstColor:  color.RGBA{R: 255, G: 255, B: 255, A: 255},
-		SecondColor: color.RGBA{R: 255, G: 255, B: 255, A: 255},
-		ThirdColor:  color.RGBA{R: 255, G: 255, B: 255, A: 255},
-	}
-	got := pxc.ColorsAvg
-	if !cmp.Equal(want, got) {
-		t.Error(cmp.Diff(want, got))
-	}
-}
-
-func TestAverageIsConsistentWhenColorsRemainTheSame(t *testing.T) {
-	//t.Parallel()
-	pxc := bluestacks.PxColorPipe{
-		HexMax: 2,
-		Colors: bluestacks.Colors{
-			RGBAs: [][]color.RGBA{
-				{{255, 255, 255, 255}, {255, 255, 255, 255}},
-				{{255, 255, 255, 255}, {255, 255, 255, 255}},
-				{{255, 255, 255, 255}, {255, 255, 255, 255}},
-			},
-		},
-	}
-	// Why does each iteration decrement the color fields by 1?
-	for i := 0; i < 4; i++ {
-		pxc.Average(false)
-	}
-	want := bluestacks.ColorsAverage{
-		FirstColor:  color.RGBA{R: 255, G: 255, B: 255, A: 255},
-		SecondColor: color.RGBA{R: 255, G: 255, B: 255, A: 255},
-		ThirdColor:  color.RGBA{R: 255, G: 255, B: 255, A: 255},
-	}
-	got := pxc.ColorsAvg
-	if !cmp.Equal(want, got) {
-		t.Error(cmp.Diff(want, got))
-	}
-
-}
-
 func TestString(t *testing.T) {
 	t.Parallel()
 	want := "b28d2f b6482d c0660f"
@@ -350,6 +226,91 @@ func TestToJsonInvalidInputReader(t *testing.T) {
 	if len(data) > 0 {
 		t.Errorf("want no output from ToJson when length of input reader is not 20, but got %s", data)
 	}
+}
+
+func TestOpacityIsFilteringTheMostOpaqueColors(t *testing.T) {
+	t.Parallel()
+	pxc := bluestacks.PxColorPipe{
+		Colors: bluestacks.Colors{
+			RGBAs: [][]color.RGBA{
+				{{133, 190, 198, 255}, {100, 170, 180, 255}, {125, 180, 190, 255}},
+				{{232, 141, 52, 255}, {212, 121, 32, 255}, {202, 111, 22, 255}},
+				{{100, 168, 23, 255}, {130, 178, 33, 255}, {140, 188, 37, 255}},
+			},
+		},
+	}
+	want := bluestacks.OpaqueColors{
+		Colors: []color.RGBA{
+			{100, 170, 180, 255},
+			{202, 111, 22, 255},
+			{100, 168, 23, 255}},
+	}
+	pxc.Opacity()
+	got := pxc.Opaques
+	if !cmp.Equal(want, got) {
+		t.Error(cmp.Diff(want, got))
+	}
+}
+
+func TestOpacityNoOpsWhenPxColorPipeHasAnError(t *testing.T) {
+	t.Parallel()
+	pxc := bluestacks.PxColorPipe{
+		Err: errors.New("some non-nil error"),
+		Colors: bluestacks.Colors{
+			RGBAs: [][]color.RGBA{
+				{{133, 190, 198, 255}, {100, 170, 180, 255}, {125, 180, 190, 255}},
+				{{232, 141, 52, 255}, {212, 121, 32, 255}, {202, 111, 22, 255}},
+				{{100, 168, 23, 255}, {130, 178, 33, 255}, {140, 188, 37, 255}},
+			},
+		},
+	}
+	pxc.Opacity()
+	want := bluestacks.OpaqueColors{Colors: []color.RGBA{}}
+	got := pxc.Opaques
+	if !cmp.Equal(want, got) {
+		t.Error(cmp.Diff(want, got))
+	}
+
+}
+
+func TestOpaqueToHexIsFilteringTheRGBAsOfOpaquesToHexadecimal(t *testing.T) {
+	t.Parallel()
+	pxc := bluestacks.PxColorPipe{
+		Reader: strings.NewReader(" "),
+		Opaques: bluestacks.OpaqueColors{
+			Colors: []color.RGBA{
+				{100, 170, 180, 255},
+				{202, 111, 22, 255},
+				{100, 168, 23, 255}},
+		},
+	}
+	pxc.OpaqueToHex()
+	want := "64aab4 ca6f16 64a817"
+	got, err := io.ReadAll(pxc.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cmp.Equal(want, string(got)) {
+		t.Error(cmp.Diff(want, string(got)))
+	}
+}
+
+// TODO: TDD OpaqueToHex NoOP & Errors if any
+func TestOpaqueToHexNoOpsWhenPxColorPipeHasAnError(t *testing.T) {
+	t.Parallel()
+	pxc := bluestacks.PxColorPipe{
+		Err:     errors.New("some non-nil error"),
+		Opaques: bluestacks.OpaqueColors{Colors: []color.RGBA{}},
+	}
+	pxc.OpaqueToHex()
+	data, err := io.ReadAll(pxc.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) > 0 {
+		t.Errorf("want no output from OpaqueToHex when PxColourPipe has an err, but got %v", data)
+	}
+
 }
 
 // TODO: TDD a Post sink

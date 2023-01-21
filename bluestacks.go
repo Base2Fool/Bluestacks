@@ -7,24 +7,13 @@ import (
 	"fmt"
 	"github.com/g4s8/hexcolor"
 	"github.com/go-vgo/robotgo"
+	hook "github.com/robotn/gohook"
 	"image/color"
 	"io"
 	"log"
-	"math"
 	"os"
+	"sort"
 	"strings"
-)
-
-var (
-	redSum1   float64
-	greenSum1 float64
-	blueSum1  float64
-	redSum2   float64
-	greenSum2 float64
-	blueSum2  float64
-	redSum3   float64
-	greenSum3 float64
-	blueSum3  float64
 )
 
 type PxColorPipe struct {
@@ -33,7 +22,7 @@ type PxColorPipe struct {
 	HexMax                   int
 	McCoords                 []MouseCursorCoords
 	Colors                   Colors
-	ColorsAvg                ColorsAverage
+	Opaques                  OpaqueColors
 	BufOne, BufTwo, BufThree bytes.Buffer
 	Err                      error
 }
@@ -42,10 +31,8 @@ type Colors struct {
 	RGBAs [][]color.RGBA
 }
 
-type ColorsAverage struct {
-	FirstColor  color.RGBA
-	SecondColor color.RGBA
-	ThirdColor  color.RGBA
+type OpaqueColors struct {
+	Colors []color.RGBA
 }
 
 type MouseCursorCoords struct {
@@ -58,135 +45,38 @@ type TriHexColors struct {
 	ThirdHexColor  string
 }
 
-func (px *PxColorPipe) Average(useSquaredAverage bool) *PxColorPipe {
-	if px.Err != nil {
-		px.Reader = strings.NewReader("")
-		return px
+func NewPxColorPipe() PxColorPipe {
+	px := PxColorPipe{
+		Output:   os.Stdout,
+		HexMax:   13,
+		McCoords: ByPickingPixels(),
 	}
-	var count float64
-	for i, sliceRgb := range px.Colors.RGBAs {
-		switch i {
-		case 0:
-			for _, col := range sliceRgb {
-				if useSquaredAverage {
-					redSum1 += float64(col.R) * float64(col.R)
-					greenSum1 += float64(col.G) * float64(col.G)
-					blueSum1 += float64(col.B) * float64(col.B)
-					count++
-				} else {
-					redSum1 += float64(col.R)
-					greenSum1 += float64(col.G)
-					blueSum1 += float64(col.B)
-					count++
-				}
-			}
-		case 1:
-			for _, col := range sliceRgb {
-				if useSquaredAverage {
-					redSum2 += float64(col.R) * float64(col.R)
-					greenSum2 += float64(col.G) * float64(col.G)
-					blueSum2 += float64(col.B) * float64(col.B)
-				} else {
-					redSum2 += float64(col.R)
-					greenSum2 += float64(col.G)
-					blueSum2 += float64(col.B)
-				}
-			}
-		case 2:
-			for _, col := range sliceRgb {
-				if useSquaredAverage {
-					redSum3 += float64(col.R) * float64(col.R)
-					greenSum3 += float64(col.G) * float64(col.G)
-					blueSum3 += float64(col.B) * float64(col.B)
-				} else {
-					redSum3 += float64(col.R)
-					greenSum3 += float64(col.G)
-					blueSum3 += float64(col.B)
-				}
-			}
-
-		}
-	}
-	var firstHexAvg string
-	var secondHexAvg string
-	var thirdHexAvg string
-	if useSquaredAverage {
-		redAvg1 := uint8(math.Round(math.Sqrt(redSum1 / count)))
-		greenAvg1 := uint8(math.Round(math.Sqrt(greenSum1 / count)))
-		blueAvg1 := uint8(math.Round(math.Sqrt(blueSum1 / count)))
-
-		redAvg2 := uint8(math.Round(math.Sqrt(redSum2 / count)))
-		greenAvg2 := uint8(math.Round(math.Sqrt(greenSum2 / count)))
-		blueAvg2 := uint8(math.Round(math.Sqrt(blueSum2 / count)))
-
-		redAvg3 := uint8(math.Round(math.Sqrt(redSum3 / count)))
-		greenAvg3 := uint8(math.Round(math.Sqrt(greenSum3 / count)))
-		blueAvg3 := uint8(math.Round(math.Sqrt(blueSum3 / count)))
-
-		px.ColorsAvg = ColorsAverage{
-			FirstColor: color.RGBA{
-				R: redAvg1,
-				G: greenAvg1,
-				B: blueAvg1,
-				A: 255,
-			},
-			SecondColor: color.RGBA{
-				R: redAvg2,
-				G: greenAvg2,
-				B: blueAvg2,
-				A: 255,
-			},
-			ThirdColor: color.RGBA{
-				R: redAvg3,
-				G: greenAvg3,
-				B: blueAvg3,
-				A: 255,
-			},
-		}
-		firstHexAvg = fmt.Sprintf("%02x%02x%02x", redAvg1, greenAvg1, blueAvg1)
-		secondHexAvg = fmt.Sprintf("%02x%02x%02x", redAvg2, greenAvg2, blueAvg2)
-		thirdHexAvg = fmt.Sprintf("%02x%02x%02x", redAvg3, greenAvg3, blueAvg3)
-	} else {
-		redAvg1 := uint8(math.Round(redSum1 / count))
-		greenAvg1 := uint8(math.Round(greenSum1 / count))
-		blueAvg1 := uint8(math.Round(blueSum1 / count))
-
-		redAvg2 := uint8(math.Round(redSum2 / count))
-		greenAvg2 := uint8(math.Round(greenSum2 / count))
-		blueAvg2 := uint8(math.Round(blueSum2 / count))
-
-		redAvg3 := uint8(math.Round(redSum3 / count))
-		greenAvg3 := uint8(math.Round(greenSum3 / count))
-		blueAvg3 := uint8(math.Round(blueSum3 / count))
-
-		px.ColorsAvg = ColorsAverage{
-			FirstColor: color.RGBA{
-				R: redAvg1,
-				G: greenAvg1,
-				B: blueAvg1,
-				A: 255,
-			},
-			SecondColor: color.RGBA{
-				R: redAvg2,
-				G: greenAvg2,
-				B: blueAvg2,
-				A: 255,
-			},
-			ThirdColor: color.RGBA{
-				R: redAvg3,
-				G: greenAvg3,
-				B: blueAvg3,
-				A: 255,
-			},
-		}
-
-		firstHexAvg = fmt.Sprintf("%02x%02x%02x", redAvg1, greenAvg1, blueAvg1)
-		secondHexAvg = fmt.Sprintf("%02x%02x%02x", redAvg2, greenAvg2, blueAvg2)
-		thirdHexAvg = fmt.Sprintf("%02x%02x%02x", redAvg3, greenAvg3, blueAvg3)
-
-	}
-	px.Reader = strings.NewReader(firstHexAvg + " " + secondHexAvg + " " + thirdHexAvg)
 	return px
+}
+
+func ByPickingPixels() []MouseCursorCoords {
+	fmt.Println("Please wait a few seconds, then click three positions.")
+	var coords []int16
+	var clicks int
+	var clicked = 3
+	evChan := hook.Start()
+	for ev := range evChan {
+		if ev.Clicks == 1 && ev.Kind == 8 {
+			coords = append(coords, ev.X, ev.Y)
+			clicks++
+			clicked--
+			if clicks == 3 {
+				break
+			}
+		}
+	}
+	hook.End()
+	mcCoords := []MouseCursorCoords{
+		{X: int(coords[0]), Y: int(coords[1])},
+		{X: int(coords[2]), Y: int(coords[3])},
+		{X: int(coords[4]), Y: int(coords[5])},
+	}
+	return mcCoords
 }
 
 func (px *PxColorPipe) Stdout() *PxColorPipe {
@@ -277,31 +167,6 @@ func (px *PxColorPipe) HexToRGBA() *PxColorPipe {
 	return px
 }
 
-func Kill() error {
-	pid, err := robotgo.FindIds("hd-player.exe")
-	if err != nil {
-		return err
-	}
-	// TODO: make a better error msg. Why isn't the above func erring when antivirus blocks run?
-	if len(pid) < 1 {
-		return errors.New("no pid was found. Try disable antivirus")
-	}
-	pidInt := pid[0]
-	p, err := os.FindProcess(int(pidInt))
-	if err != nil {
-		return err
-	}
-	if err := p.Kill(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func MaxWindow(x, y int) {
-	robotgo.MoveClick(x, y)
-}
-
-// Run runs Bluestacks
 func Run(path string) error {
 	_, err := robotgo.Run(path)
 	if err != nil {
@@ -310,17 +175,11 @@ func Run(path string) error {
 	return nil
 }
 
-// RunStacks Trivial wrapper of Run
-func RunStacks() error {
-	err := Run("C:/Program Files/BlueStacks_nxt/HD-Player.exe")
-	if err != nil {
-		return err
+func RunCLI() {
+	px := NewPxColorPipe()
+	for {
+		px.Hex().HexToRGBA().Opacity().OpaqueToHex().ToJson().Stdout()
 	}
-	return nil
-}
-
-func StartApp(x, y int) {
-	robotgo.MoveClick(x, y)
 }
 
 func (px *PxColorPipe) String() (string, error) {
@@ -359,5 +218,48 @@ func (px *PxColorPipe) ToJson() *PxColorPipe {
 		return px
 	}
 	px.Reader = bytes.NewReader(dataJson)
+	return px
+}
+
+func (px *PxColorPipe) Opacity() *PxColorPipe {
+	if px.Err != nil {
+		px.Opaques = OpaqueColors{Colors: []color.RGBA{}}
+		return px
+	}
+	for _, rgbaBunch := range px.Colors.RGBAs {
+		sort.Slice(rgbaBunch, func(i, j int) bool {
+			return rgbaBunch[i].R < rgbaBunch[j].R
+		})
+	}
+	px.Opaques = OpaqueColors{
+		Colors: []color.RGBA{
+			px.Colors.RGBAs[0][0],
+			px.Colors.RGBAs[1][0],
+			px.Colors.RGBAs[2][0]},
+	}
+	return px
+}
+
+func (px *PxColorPipe) OpaqueToHex() *PxColorPipe {
+	if px.Err != nil {
+		px.Reader = strings.NewReader("")
+		return px
+	}
+	firstHex := fmt.Sprintf(
+		"%02x%02x%02x",
+		px.Opaques.Colors[0].R,
+		px.Opaques.Colors[0].G,
+		px.Opaques.Colors[0].B)
+	secondHex := fmt.Sprintf(
+		"%02x%02x%02x",
+		px.Opaques.Colors[1].R,
+		px.Opaques.Colors[1].G,
+		px.Opaques.Colors[1].B)
+	thirdHex := fmt.Sprintf(
+		"%02x%02x%02x",
+		px.Opaques.Colors[2].R,
+		px.Opaques.Colors[2].G,
+		px.Opaques.Colors[2].B)
+	px.Reader = strings.NewReader(firstHex + " " + secondHex + " " + thirdHex)
 	return px
 }
