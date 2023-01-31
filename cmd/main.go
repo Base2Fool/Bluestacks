@@ -1,6 +1,8 @@
 package main
 
-import "bluestacks"
+import (
+	"bluestacks"
+)
 
 func main() {
 	bluestacks.RunCLI()

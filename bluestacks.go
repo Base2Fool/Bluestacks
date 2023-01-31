@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 )
@@ -176,9 +177,19 @@ func Run(path string) error {
 }
 
 func RunCLI() {
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Kill)
+		<-c
+		os.Exit(1)
+	}()
 	px := NewPxColorPipe()
 	for {
-		px.Hex().HexToRGBA().Opacity().OpaqueToHex().ToJson().Stdout()
+		s, err := px.Hex().HexToRGBA().Opacity().OpaqueToHex().ToJson().String()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(s)
 	}
 }
 
