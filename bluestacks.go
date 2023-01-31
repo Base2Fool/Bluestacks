@@ -59,13 +59,11 @@ func ByPickingPixels() []MouseCursorCoords {
 	fmt.Println("Please wait a few seconds, then click three positions.")
 	var coords []int16
 	var clicks int
-	var clicked = 3
 	evChan := hook.Start()
 	for ev := range evChan {
 		if ev.Clicks == 1 && ev.Kind == 8 {
 			coords = append(coords, ev.X, ev.Y)
 			clicks++
-			clicked--
 			if clicks == 3 {
 				break
 			}
