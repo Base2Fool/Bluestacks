@@ -49,7 +49,7 @@ type TriHexColors struct {
 func NewPxColorPipe() PxColorPipe {
 	px := PxColorPipe{
 		Output:   os.Stdout,
-		HexMax:   13,
+		HexMax:   4,
 		McCoords: ByPickingPixels(),
 	}
 	return px
@@ -113,7 +113,7 @@ func (px *PxColorPipe) Hex() *PxColorPipe {
 			case 2:
 				px.BufThree.WriteString("#" + robotgo.GetMouseColor() + " ")
 			}
-			robotgo.MilliSleep(300)
+			robotgo.MilliSleep(200)
 		}
 	}
 	return px
