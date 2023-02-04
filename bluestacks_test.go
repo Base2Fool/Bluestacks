@@ -5,9 +5,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/google/go-cmp/cmp"
 	"image/color"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -180,9 +184,9 @@ func TestToJson(t *testing.T) {
 	}
 	pxc.ToJson()
 	want := bluestacks.TriHexColors{
-		FirstHexColor:  "b28d2f",
-		SecondHexColor: "b6482d",
-		ThirdHexColor:  "c0660f",
+		First:  "b28d2f",
+		Second: "b6482d",
+		Third:  "c0660f",
 	}
 	data, err := io.ReadAll(pxc.Reader)
 	if err != nil {
@@ -313,4 +317,66 @@ func TestOpaqueToHexNoOpsWhenPxColorPipeHasAnError(t *testing.T) {
 
 }
 
-// TODO: TDD a Post sink
+func TestPatchIsPostingColorsToEndPoint(t *testing.T) {
+	t.Parallel()
+	pxc := bluestacks.PxColorPipe{
+		Opaques: bluestacks.OpaqueColors{
+			Colors: []color.RGBA{
+				{255, 251, 187, 255},
+				{19, 171, 19, 255},
+				{255, 255, 255, 255}},
+		},
+	}
+	h1 := func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cFromReq := bluestacks.TriHexColors{}
+		err = json.Unmarshal(data, &cFromReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		f, err := os.Open("testdata/color_record_update.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		fileData, err := io.ReadAll(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cFromFile := bluestacks.TriHexColors{}
+		err = json.Unmarshal(fileData, &cFromFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cmp.Equal(cFromFile, cFromReq) {
+			t.Error(cmp.Diff(cFromFile, cFromReq))
+		}
+		if cmp.Equal(cFromFile, cFromReq) {
+			fmt.Fprintf(w, "Colors Match")
+		}
+	}
+	ts := httptest.NewTLSServer(http.HandlerFunc(h1))
+	defer ts.Close()
+	pxc.HttpClient = ts.Client()
+	resp, err := pxc.OpaqueToHex().ToJson().Patch(ts.URL)
+	if err != nil {
+		t.Fatal()
+	}
+	want := "Colors Match"
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal()
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal()
+	}
+	got := string(data)
+	if want != got {
+		t.Errorf("want %q, but got %q", want, got)
+	}
+
+}
