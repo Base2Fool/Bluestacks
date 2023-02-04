@@ -380,3 +380,21 @@ func TestPatchIsPostingColorsToEndPoint(t *testing.T) {
 	}
 
 }
+
+func TestPatchInvalidInput(t *testing.T) {
+	t.Parallel()
+	pxc := bluestacks.PxColorPipe{
+		Reader: strings.NewReader("b28d2f b6482d "),
+		Err:    errors.New("some non-nil error"),
+	}
+	h1 := func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "Hello, World")
+	}
+	ts := httptest.NewTLSServer(http.HandlerFunc(h1))
+	pxc.HttpClient = ts.Client()
+	_, err := pxc.ToJson().Patch(ts.URL)
+	if err == nil {
+		t.Error("want a non-nil error when pipe has an error, but not nil")
+	}
+
+}
