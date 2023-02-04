@@ -22,6 +22,7 @@ type PxColorPipe struct {
 	Reader                   io.Reader
 	Output                   io.Writer
 	HttpClient               *http.Client
+	URL                      string
 	HexMax                   int
 	McCoords                 []MouseCursorCoords
 	Colors                   Colors
@@ -29,6 +30,8 @@ type PxColorPipe struct {
 	BufOne, BufTwo, BufThree bytes.Buffer
 	Err                      error
 }
+
+type option func(px *PxColorPipe) error
 
 type Colors struct {
 	RGBAs [][]color.RGBA
@@ -48,14 +51,32 @@ type TriHexColors struct {
 	Third  string `json:"third"`
 }
 
-func NewPxColorPipe() PxColorPipe {
+func NewPxColorPipe(opts ...option) (PxColorPipe, error) {
 	px := PxColorPipe{
 		Output:     os.Stdout,
 		HttpClient: http.DefaultClient,
 		HexMax:     36,
-		McCoords:   ByPickingPixels(),
 	}
-	return px
+	for _, opt := range opts {
+		err := opt(&px)
+		if err != nil {
+			return PxColorPipe{}, err
+		}
+	}
+	return px, nil
+}
+
+func WithInputFromArgs(args []string) option {
+	return func(px *PxColorPipe) error {
+		if len(args) < 1 {
+			return errors.New("an url argument is required")
+		}
+		if len(args) > 1 {
+			return errors.New("command only takes one argument")
+		}
+		px.URL = args[0]
+		return nil
+	}
 }
 
 func ByPickingPixels() []MouseCursorCoords {
@@ -169,14 +190,7 @@ func (px *PxColorPipe) HexToRGBA() *PxColorPipe {
 	return px
 }
 
-func Run(path string) error {
-	_, err := robotgo.Run(path)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
+// TODO: Handle Error! Perhaps writing to a log file?
 func RunCLI() {
 	go func() {
 		c := make(chan os.Signal, 1)
@@ -184,13 +198,16 @@ func RunCLI() {
 		<-c
 		os.Exit(1)
 	}()
-	px := NewPxColorPipe()
+	px, err := NewPxColorPipe(WithInputFromArgs(os.Args[1:]))
+	if err != nil {
+		log.Fatal(err)
+	}
+	px.McCoords = ByPickingPixels()
 	for {
-		s, err := px.Hex().HexToRGBA().Opacity().OpaqueToHex().ToJson().String()
+		_, err := px.Hex().HexToRGBA().Opacity().OpaqueToHex().ToJson().Patch()
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
-		fmt.Println(s)
 	}
 }
 
@@ -276,11 +293,11 @@ func (px *PxColorPipe) OpaqueToHex() *PxColorPipe {
 	return px
 }
 
-func (px *PxColorPipe) Patch(url string) (*http.Response, error) {
+func (px *PxColorPipe) Patch() (*http.Response, error) {
 	if px.Err != nil {
 		return nil, px.Err
 	}
-	req, err := http.NewRequest(http.MethodPatch, url, px.Reader)
+	req, err := http.NewRequest(http.MethodPatch, px.URL, px.Reader)
 	if err != nil {
 		return nil, err
 	}

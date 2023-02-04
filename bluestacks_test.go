@@ -16,15 +16,6 @@ import (
 	"testing"
 )
 
-func TestRunErrsWhenDefaultPathIsMissing(t *testing.T) {
-	t.Parallel()
-	err := bluestacks.Run("C:/Program Files/Bogus.exe")
-	if err == nil {
-		t.Error("want error, but got nil")
-	}
-
-}
-
 func TestStdout(t *testing.T) {
 	t.Parallel()
 	buf := &bytes.Buffer{}
@@ -299,7 +290,6 @@ func TestOpaqueToHexIsFilteringTheRGBAsOfOpaquesToHexadecimal(t *testing.T) {
 	}
 }
 
-// TODO: TDD OpaqueToHex NoOP & Errors if any
 func TestOpaqueToHexNoOpsWhenPxColorPipeHasAnError(t *testing.T) {
 	t.Parallel()
 	pxc := bluestacks.PxColorPipe{
@@ -319,14 +309,7 @@ func TestOpaqueToHexNoOpsWhenPxColorPipeHasAnError(t *testing.T) {
 
 func TestPatchIsPostingColorsToEndPoint(t *testing.T) {
 	t.Parallel()
-	pxc := bluestacks.PxColorPipe{
-		Opaques: bluestacks.OpaqueColors{
-			Colors: []color.RGBA{
-				{255, 251, 187, 255},
-				{19, 171, 19, 255},
-				{255, 255, 255, 255}},
-		},
-	}
+
 	h1 := func(w http.ResponseWriter, r *http.Request) {
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -361,8 +344,17 @@ func TestPatchIsPostingColorsToEndPoint(t *testing.T) {
 	}
 	ts := httptest.NewTLSServer(http.HandlerFunc(h1))
 	defer ts.Close()
+	pxc := bluestacks.PxColorPipe{
+		Opaques: bluestacks.OpaqueColors{
+			Colors: []color.RGBA{
+				{255, 251, 187, 255},
+				{19, 171, 19, 255},
+				{255, 255, 255, 255}},
+		},
+		URL: ts.URL,
+	}
 	pxc.HttpClient = ts.Client()
-	resp, err := pxc.OpaqueToHex().ToJson().Patch(ts.URL)
+	resp, err := pxc.OpaqueToHex().ToJson().Patch()
 	if err != nil {
 		t.Fatal()
 	}
@@ -383,18 +375,65 @@ func TestPatchIsPostingColorsToEndPoint(t *testing.T) {
 
 func TestPatchInvalidInput(t *testing.T) {
 	t.Parallel()
-	pxc := bluestacks.PxColorPipe{
-		Reader: strings.NewReader("b28d2f b6482d "),
-		Err:    errors.New("some non-nil error"),
-	}
+
 	h1 := func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "Hello, World")
 	}
 	ts := httptest.NewTLSServer(http.HandlerFunc(h1))
+	pxc := bluestacks.PxColorPipe{
+		Reader: strings.NewReader("b28d2f b6482d "),
+		Err:    errors.New("some non-nil error"),
+		URL:    ts.URL,
+	}
 	pxc.HttpClient = ts.Client()
-	_, err := pxc.ToJson().Patch(ts.URL)
+	_, err := pxc.ToJson().Patch()
 	if err == nil {
 		t.Error("want a non-nil error when pipe has an error, but not nil")
 	}
 
+}
+
+func TestWithInputFromArgs(t *testing.T) {
+	t.Parallel()
+	h1 := func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "Hello, World")
+	}
+	ts := httptest.NewTLSServer(http.HandlerFunc(h1))
+	defer ts.Close()
+	args := []string{ts.URL}
+	pxc, err := bluestacks.NewPxColorPipe(bluestacks.WithInputFromArgs(args))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pxc.Reader = strings.NewReader("b28d2f b6482d c0660f")
+	pxc.HttpClient = ts.Client()
+	resp, err := pxc.ToJson().Patch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := http.StatusOK
+	got := resp.StatusCode
+	if want != got {
+		t.Errorf("want status code %d, but got %d", want, got)
+	}
+
+}
+
+func TestWithInputFromArgsErrsWhenEmpty(t *testing.T) {
+	t.Parallel()
+	args := []string{}
+	_, err := bluestacks.NewPxColorPipe(bluestacks.WithInputFromArgs(args))
+	if err == nil {
+		t.Error("wanted an argument required error, but got nil")
+	}
+
+}
+
+func TestWithInputFromArgsErrsWhenMoreThanOneArgument(t *testing.T) {
+	t.Parallel()
+	args := []string{"1", "2"}
+	_, err := bluestacks.NewPxColorPipe(bluestacks.WithInputFromArgs(args))
+	if err == nil {
+		t.Error("wanted an non-nil error, but got nil")
+	}
 }
