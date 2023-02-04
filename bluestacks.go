@@ -277,5 +277,13 @@ func (px *PxColorPipe) OpaqueToHex() *PxColorPipe {
 }
 
 func (px *PxColorPipe) Patch(url string) (*http.Response, error) {
-	return px.HttpClient.Post(url, "application/json", px.Reader)
+	if px.Err != nil {
+		return nil, px.Err
+	}
+	req, err := http.NewRequest(http.MethodPatch, url, px.Reader)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return px.HttpClient.Do(req)
 }
