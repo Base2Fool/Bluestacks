@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -20,6 +21,7 @@ import (
 type PxColorPipe struct {
 	Reader                   io.Reader
 	Output                   io.Writer
+	HttpClient               *http.Client
 	HexMax                   int
 	McCoords                 []MouseCursorCoords
 	Colors                   Colors
@@ -41,16 +43,17 @@ type MouseCursorCoords struct {
 }
 
 type TriHexColors struct {
-	FirstHexColor  string
-	SecondHexColor string
-	ThirdHexColor  string
+	First  string `json:"first"`
+	Second string `json:"second"`
+	Third  string `json:"third"`
 }
 
 func NewPxColorPipe() PxColorPipe {
 	px := PxColorPipe{
-		Output:   os.Stdout,
-		HexMax:   4,
-		McCoords: ByPickingPixels(),
+		Output:     os.Stdout,
+		HttpClient: http.DefaultClient,
+		HexMax:     36,
+		McCoords:   ByPickingPixels(),
 	}
 	return px
 }
@@ -217,9 +220,9 @@ func (px *PxColorPipe) ToJson() *PxColorPipe {
 		return px
 	}
 	thc := TriHexColors{
-		FirstHexColor:  string(data[:6]),
-		SecondHexColor: string(data[7:13]),
-		ThirdHexColor:  string(data[14:]),
+		First:  string(data[:6]),
+		Second: string(data[7:13]),
+		Third:  string(data[14:]),
 	}
 	dataJson, err := json.Marshal(thc)
 	if err != nil {
@@ -271,4 +274,8 @@ func (px *PxColorPipe) OpaqueToHex() *PxColorPipe {
 		px.Opaques.Colors[2].B)
 	px.Reader = strings.NewReader(firstHex + " " + secondHex + " " + thirdHex)
 	return px
+}
+
+func (px *PxColorPipe) Patch(url string) (*http.Response, error) {
+	return px.HttpClient.Post(url, "application/json", px.Reader)
 }
